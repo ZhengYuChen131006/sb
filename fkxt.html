@@ -1,0 +1,428 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>云端反馈中心</title>
+    <!-- 引入Firebase SDK -->
+    <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-app.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-firestore.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-auth.js"></script>
+    <style>
+        body {
+            font-family: 'Microsoft YaHei', sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .feedback-center {
+            background-color: white;
+            border-radius: 8px;
+            padding: 20px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #333;
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        .option-card {
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            padding: 15px;
+            margin-bottom: 15px;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+        .option-card:hover {
+            background-color: #f9f9f9;
+            border-color: #bbb;
+        }
+        .option-card h3 {
+            margin-top: 0;
+            color: #444;
+        }
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0,0,0,0.5);
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+        }
+        .modal-box {
+            background-color: white;
+            padding: 30px;
+            border-radius: 8px;
+            width: 350px;
+            max-width: 90%;
+        }
+        .modal-box h2 {
+            margin-top: 0;
+            text-align: center;
+        }
+        .form-group {
+            margin-bottom: 15px;
+        }
+        .form-group label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+        }
+        .form-group input, 
+        .form-group textarea {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 16px;
+            box-sizing: border-box;
+        }
+        .form-group textarea {
+            height: 100px;
+            resize: vertical;
+        }
+        .button-group {
+            display: flex;
+            justify-content: space-between;
+            margin-top: 20px;
+        }
+        button {
+            padding: 10px 20px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 16px;
+            transition: background-color 0.3s;
+        }
+        .submit-btn {
+            background-color: #4CAF50;
+            color: white;
+        }
+        .submit-btn:hover {
+            background-color: #45a049;
+        }
+        .cancel-btn {
+            background-color: #f44336;
+            color: white;
+        }
+        .cancel-btn:hover {
+            background-color: #d32f2f;
+        }
+        .feedback-list {
+            display: none;
+            margin-top: 20px;
+            border-top: 1px solid #eee;
+            padding-top: 20px;
+        }
+        .feedback-item {
+            padding: 15px;
+            border-bottom: 1px solid #eee;
+        }
+        .feedback-item:last-child {
+            border-bottom: none;
+        }
+        .feedback-meta {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 10px;
+            font-size: 14px;
+            color: #666;
+        }
+        .error-message {
+            color: red;
+            margin-top: 10px;
+            text-align: center;
+        }
+        .success-message {
+            color: green;
+            margin-top: 10px;
+            text-align: center;
+        }
+        .loading {
+            text-align: center;
+            padding: 20px;
+        }
+        .loading-spinner {
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #3498db;
+            border-radius: 50%;
+            width: 30px;
+            height: 30px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body>
+    <div class="feedback-center">
+        <h1>云端反馈中心</h1>
+        
+        <div class="option-card" id="rightsHolderOption">
+            <h3>权利人</h3>
+            <p>点击此处输入密码查看所有反馈内容</p>
+        </div>
+        
+        <div class="option-card" id="submitFeedbackOption">
+            <h3>提交反馈</h3>
+            <p>点击此处提交新的反馈</p>
+        </div>
+        
+        <!-- 提交反馈模态框 -->
+        <div class="modal" id="submitFeedbackModal">
+            <div class="modal-box">
+                <h2>提交反馈</h2>
+                <form id="feedbackForm">
+                    <div class="form-group">
+                        <label for="userName">您的姓名:</label>
+                        <input type="text" id="userName" placeholder="请输入您的姓名" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="feedbackContent">反馈内容:</label>
+                        <textarea id="feedbackContent" placeholder="请输入您的反馈内容" required></textarea>
+                    </div>
+                    <div class="button-group">
+                        <button type="button" class="cancel-btn" id="cancelFeedback">取消</button>
+                        <button type="submit" class="submit-btn">提交</button>
+                    </div>
+                </form>
+                <div class="error-message" id="feedbackError"></div>
+                <div class="success-message" id="feedbackSuccess"></div>
+            </div>
+        </div>
+        
+        <!-- 密码输入模态框 -->
+        <div class="modal" id="passwordModal">
+            <div class="modal-box">
+                <h2>请输入权利人密码</h2>
+                <div class="form-group">
+                    <input type="password" id="passwordInput" placeholder="请输入密码">
+                </div>
+                <div class="button-group">
+                    <button type="button" class="cancel-btn" id="cancelPassword">取消</button>
+                    <button type="button" class="submit-btn" id="submitPassword">提交</button>
+                </div>
+                <div class="error-message" id="passwordError"></div>
+            </div>
+        </div>
+        
+        <!-- 反馈内容列表 -->
+        <div class="feedback-list" id="feedbackList">
+            <h2>所有反馈内容</h2>
+            <div id="feedbackItems">
+                <div class="loading">
+                    <div class="loading-spinner"></div>
+                    <p>加载反馈数据中...</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // 在这里替换为您的Firebase配置
+        const firebaseConfig = {
+            apiKey: "YOUR_API_KEY",
+            authDomain: "YOUR_AUTH_DOMAIN",
+            projectId: "YOUR_PROJECT_ID",
+            storageBucket: "YOUR_STORAGE_BUCKET",
+            messagingSenderId: "YOUR_SENDER_ID",
+            appId: "YOUR_APP_ID"
+        };
+
+        // 初始化Firebase
+        firebase.initializeApp(firebaseConfig);
+        const db = firebase.firestore();
+        const auth = firebase.auth();
+        
+        // 获取DOM元素
+        const rightsHolderOption = document.getElementById('rightsHolderOption');
+        const submitFeedbackOption = document.getElementById('submitFeedbackOption');
+        const submitFeedbackModal = document.getElementById('submitFeedbackModal');
+        const passwordModal = document.getElementById('passwordModal');
+        const feedbackForm = document.getElementById('feedbackForm');
+        const userNameInput = document.getElementById('userName');
+        const feedbackContentInput = document.getElementById('feedbackContent');
+        const cancelFeedbackBtn = document.getElementById('cancelFeedback');
+        const passwordInput = document.getElementById('passwordInput');
+        const submitPasswordBtn = document.getElementById('submitPassword');
+        const cancelPasswordBtn = document.getElementById('cancelPassword');
+        const feedbackError = document.getElementById('feedbackError');
+        const feedbackSuccess = document.getElementById('feedbackSuccess');
+        const passwordError = document.getElementById('passwordError');
+        const feedbackList = document.getElementById('feedbackList');
+        const feedbackItems = document.getElementById('feedbackItems');
+        
+        // 权利人密码
+        const RIGHTS_HOLDER_PASSWORD = "zyc20131006";
+        // 权利人登录状态
+        let isRightsHolderLoggedIn = false;
+        
+        // 点击提交反馈选项
+        submitFeedbackOption.addEventListener('click', function() {
+            submitFeedbackModal.style.display = 'flex';
+            userNameInput.focus();
+        });
+        
+        // 点击权利人选项
+        rightsHolderOption.addEventListener('click', function() {
+            if (isRightsHolderLoggedIn) {
+                // 如果已经登录，直接显示反馈列表
+                feedbackList.style.display = 'block';
+                loadFeedbackItems();
+            } else {
+                // 否则显示密码输入框
+                passwordModal.style.display = 'flex';
+                passwordInput.focus();
+            }
+        });
+        
+        // 提交反馈表单
+        feedbackForm.addEventListener('submit', async function(e) {
+            e.preventDefault();
+            
+            const name = userNameInput.value.trim();
+            const content = feedbackContentInput.value.trim();
+            
+            if (!name || !content) {
+                feedbackError.textContent = '请填写完整的反馈信息';
+                return;
+            }
+            
+            try {
+                // 添加新反馈到Firestore
+                await db.collection('feedbacks').add({
+                    name: name,
+                    content: content,
+                    createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+                    updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+                });
+                
+                // 显示成功消息
+                feedbackSuccess.textContent = '反馈提交成功！感谢您的意见。';
+                feedbackError.textContent = '';
+                
+                // 清空表单
+                userNameInput.value = '';
+                feedbackContentInput.value = '';
+                
+                // 3秒后自动关闭
+                setTimeout(() => {
+                    submitFeedbackModal.style.display = 'none';
+                    feedbackSuccess.textContent = '';
+                }, 3000);
+            } catch (error) {
+                console.error("提交反馈出错:", error);
+                feedbackError.textContent = '提交反馈失败，请稍后再试';
+            }
+        });
+        
+        // 取消提交反馈
+        cancelFeedbackBtn.addEventListener('click', function() {
+            submitFeedbackModal.style.display = 'none';
+            feedbackError.textContent = '';
+            feedbackSuccess.textContent = '';
+        });
+        
+        // 提交密码
+        submitPasswordBtn.addEventListener('click', function() {
+            if (passwordInput.value === RIGHTS_HOLDER_PASSWORD) {
+                // 密码正确
+                isRightsHolderLoggedIn = true;
+                passwordModal.style.display = 'none';
+                passwordError.textContent = '';
+                passwordInput.value = '';
+                
+                // 显示反馈列表
+                feedbackList.style.display = 'block';
+                
+                // 加载反馈内容
+                loadFeedbackItems();
+            } else {
+                // 密码错误
+                passwordError.textContent = '密码错误，请重试';
+                passwordInput.value = '';
+                passwordInput.focus();
+            }
+        });
+        
+        // 取消密码输入
+        cancelPasswordBtn.addEventListener('click', function() {
+            passwordModal.style.display = 'none';
+            passwordError.textContent = '';
+            passwordInput.value = '';
+        });
+        
+        // 点击模态框外部关闭
+        function setupModalClose(modal) {
+            modal.addEventListener('click', function(e) {
+                if (e.target === modal) {
+                    modal.style.display = 'none';
+                    if (modal === submitFeedbackModal) {
+                        feedbackError.textContent = '';
+                        feedbackSuccess.textContent = '';
+                    } else if (modal === passwordModal) {
+                        passwordError.textContent = '';
+                    }
+                }
+            });
+        }
+        
+        setupModalClose(submitFeedbackModal);
+        setupModalClose(passwordModal);
+        
+        // 按Enter键提交密码
+        passwordInput.addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') {
+                submitPasswordBtn.click();
+            }
+        });
+        
+        // 加载反馈内容
+        async function loadFeedbackItems() {
+            feedbackItems.innerHTML = '<div class="loading"><div class="loading-spinner"></div><p>加载反馈数据中...</p></div>';
+            
+            try {
+                // 从Firestore获取反馈数据，按创建时间降序排列
+                const querySnapshot = await db.collection('feedbacks')
+                    .orderBy('createdAt', 'desc')
+                    .get();
+                
+                if (querySnapshot.empty) {
+                    feedbackItems.innerHTML = '<p>暂无反馈内容</p>';
+                    return;
+                }
+                
+                let feedbacksHtml = '';
+                querySnapshot.forEach(doc => {
+                    const feedback = doc.data();
+                    const date = feedback.createdAt ? feedback.createdAt.toDate().toLocaleString() : '未知时间';
+                    
+                    feedbacksHtml += `
+                        <div class="feedback-item">
+                            <div class="feedback-meta">
+                                <span><strong>提交人:</strong> ${feedback.name}</span>
+                                <span>${date}</span>
+                            </div>
+                            <p>${feedback.content}</p>
+                        </div>
+                    `;
+                });
+                
+                feedbackItems.innerHTML = feedbacksHtml;
+            } catch (error) {
+                console.error("加载反馈出错:", error);
+                feedbackItems.innerHTML = '<p class="error-message">加载反馈失败，请刷新页面重试</p>';
+            }
+        }
+    </script>
+</body>
+</html>
